@@ -1,0 +1,262 @@
+<!doctype html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="maximum-scale=1.0,minimum-scale=1.0,user-scalable=0,width=device-width,initial-scale=1.0"/>
+    <title>title</title>
+    <link rel="stylesheet" type="text/css" href="../css/api.css" />
+    <link rel="stylesheet" type="text/css" href="../css/style.css" />
+    <style>
+        header{ background-color: #FCFCFC; line-height: 42px; height: 42px; position: relative; }
+        header b{ width: 42px; height: 100%; display: inline-block; position: relative; z-index: 1; background: url() no-repeat center; background-size: 70% auto;  }
+        header b.ic-back{ background-image: url(../image/ic-back.png); }
+        header b.ic-check{ background-image: url(../image/ic-check.png); float: right; }
+        header .title{ position: absolute; left: 0; bottom: 0; right: 0;  text-align: center; font-size: 18px;  }
+    </style>
+</head>
+<body>
+<div id="wrap" class="flex-wrap flex-vertical" >
+    <header class="border-b" >
+        <b tapmode="hover" onclick="goback();" class="ic-back"></b>
+        <div class="title"></div>
+        <b tapmode="hover" onclick="funActionSheet();"  class="ic-check"></b>
+    </header>
+    <div id="main" class="flex-con" >
+
+    </div>
+</div>
+</body>
+</html>
+<script type="text/javascript" src="../script/api.js"></script>
+<script type="text/javascript" src="../script/chat.js"></script>
+<script type="text/javascript">
+    var publisher;
+    var player;
+    var mode;
+    var session;
+    var filters = ["normal", "smoothSkin"];
+    var filter_index = 0;
+    var display_modes = ["aspectFit", "aspectFill"];
+    var display_mode_index = 0;
+    var buttons;
+    var callback;
+    var mute = false;
+    var p2p;
+
+    var userid;
+    apiready = function(){
+        $api.fixStatusBar( $api.dom('header') );
+        $api.dom('.title').innerHTML = api.pageParam.name;
+        api.openFrame({
+            name: 'frm_mine',
+            url: './frm_mine.html',
+            rect: {
+                x: 0, 
+                y: $api.dom('header').offsetHeight, 
+                w: api.winWidth, 
+                h: $api.dom('#main').offsetHeight
+            },
+            bounces : true,
+            pageParam: {
+                name: api.pageParam.name
+           }
+        });
+
+        api.openFrame({
+                      name: 'frm_float',
+                      url: './frm_float.html',
+                      rect: {
+                      x: 100,
+                      y: $api.dom('header').offsetHeight + 100,
+                      w: 180,
+                      h: 320
+                      },
+                      bounces : true,
+                      pageParam: {
+                      name: api.pageParam.name
+                      }
+                      });
+        api.addEventListener({
+                             name:'viewdisappear'
+                             },function(ret,err){
+                                stopSDK();
+                             });
+        mode = api.pageParam.index;
+        session = {session: api.pageParam.session};
+        alert(JSON.stringify(session));
+        p2p = api.require('RTCP2P');
+        p2p.init(session);
+        p2p.addEventListener({name: 'connected'}, function(ret,err) {api.toast({msg:"p2p connected"})});
+        p2p.addEventListener({name: 'disconnected'}, function(ret,err) {api.toast({msg:"p2p disconnected"})});
+        p2p.addEventListener({name: 'error'}, function(ret,err) {api.toast({msg:"p2p error"})});
+
+        p2p.addEventListener({name: 'acceptCall'}, function(ret, err) {
+                                        api.toast({msg:JSON.stringify(ret)});
+                                       });
+        p2p.addEventListener({name: 'denyCall'}, function(ret, err) {
+                                        //api.toast({msg:JSON.stringify(ret)});
+                                        api.toast({msg:"denyCall"});
+                                       });
+        p2p.addEventListener({name: 'endCall'}, function(ret, err) {
+                                        api.toast({msg:"endCall"});
+                                       });
+
+        p2p.addEventListener({name: 'inviteCall'}, function(ret, err) {
+                                        api.toast({msg:JSON.stringify(ret)});
+                                        var sentid = ret.sendId;
+                                        //p2p.acceptInvitation();
+                                        //p2p.denyInvitation();
+                                   });
+
+        p2p.addEventListener({name: 'sentAcceptCall'}, function(ret, err) {
+                                        api.toast({msg:JSON.stringify(ret)});
+                                        //p2p.endPeerConnection();
+                                   });
+
+        p2p.login(loginCallback);
+
+        function loginCallback(ret, err) {
+                if(err) {
+                    api.toast({msg:"login failed: " + JSON.stringify(err)})
+                } else {
+                    api.toast({msg:"login..."});
+                    p2p.setRendererView({localView: {fixedOn: 'frm_float'}, remoteView: {fixedOn: 'frm_mine'}})
+                }
+        }
+
+        if (mode == 1) {
+            buttons = ['发起邀请','接受连麦','拒绝连麦', '停止连麦', '录制', '停止录制', '获取用户列表', '发起邀请'];
+            callback = function(ret) {
+                switch(ret.buttonIndex) {
+                    case 1:
+                    p2p.queryUserList({index:0,total:100},usersCallback);
+                    function usersCallback(ret, err) {
+                        if(err) {
+                            api.toast({msg:JSON.stringify(err)});
+                        } else {
+                            api.toast({msg:JSON.stringify(ret.entities[1].account)});
+                            userid = ret.entities[1].account;
+                            p2p.inviteUser({account: userid});
+                        }
+                    }
+
+                    break;
+                    case 2:
+                    p2p.acceptInvitation();
+                    
+                    break;
+                    case 3:
+                    p2p.denyInvitation();
+                    break;
+                    case 4:
+                    p2p.endPeerConnection();
+                    break;
+                    case 5:
+                    publisher.startRecording({path:api.cacheDir + '/test.mp4'});
+                    break;
+                    case 6:
+                    publisher.finishRecording(function(ret) {
+                       api.toast({msg:JSON.stringify(ret)});
+                    });
+                    break;
+                    case 7:
+
+                    break;
+                    case 8:
+                    　publisher.inviteUser({account: userid});
+                    //publisher.endPeerConnection();
+                    
+                    break;
+                }
+            };
+    
+        } else  if (mode == 2) {
+            player = api.require('gotyeLivePlayer');
+            player.init(session);
+            player.play({playView: "frm_mine"});
+            player.addEventListener({name: 'connected'}, function(ret, err) {
+                                            api.toast({msg:"connected"});
+                                       });
+
+            player.addEventListener({name: 'error'}, function(ret, err) {
+                                        api.toast({msg:JSON.stringify(ret)});
+                                   });
+
+            player.addEventListener({name: 'inviteCall'}, function(ret, err) {
+                                        api.toast({msg:JSON.stringify(ret)});
+                                        var sentid = ret.sendId;
+                                        //player.acceptInvitation();
+                                        player.denyInvitation();
+                                   });
+
+            player.addEventListener({name: 'sentAcceptCall'}, function(ret, err) {
+                                        api.toast({msg:JSON.stringify(ret)});
+                                        player.endPeerConnection();
+                                   });
+
+			player.addEventListener({name: 'endCall'}, function(ret, err) {
+                                        api.toast({msg:"endCall"});
+                                   });
+			
+
+            player.getMuteStatus(function(ret) {
+                                 if( ret ){
+                                 alert( JSON.stringify( ret ) );
+                                 }
+                                 });
+            buttons = ['切换显示模式','打开/关闭音频', '连麦'];
+            callback = function(ret) {
+                switch(ret.buttonIndex) {
+                    case 1:
+                        display_mode_index = ++display_mode_index % 2;
+                    	player.setDisplayMode({mode: display_modes[display_mode_index]});
+                        break;
+                    case 2:
+                        mute = !mute;
+                        player.setMute({mute: mute});
+                    break;
+                    case 3:
+                    player.stop();
+                    if (api.systemType == 'ios') {
+                        p2p.joinRoom( {roomId: 'abcd', localId: 'player', remoteId: 'publisher', localView: {fixedOn: 'frm_float'}, remoteView: {fixedOn: 'frm_mine'}} );
+                    } else {
+                        p2p.joinRoom( {roomId: 'abcd', localId: 'player', remoteId: 'publisher', rendererView: {fixedOn: 'frm_mine'}} );
+                    }
+                    break;
+                }
+            };
+        } else {
+            buttons = ['按钮1','按钮2','按钮3'];
+            callback = function(){};
+        }
+
+
+
+    };
+
+
+
+    function funActionSheet(){
+        api.actionSheet({
+            title: '底部弹出框',
+            cancelTitle: '取消',
+            buttons: buttons
+        },function(ret,err){
+                        callback(ret);
+        });
+    }
+
+    //不知道为什么手动调用closeWin不会触发viewdisappear事件。bug？
+    function goback() {
+        stopSDK();
+        api.closeWin();
+    }
+
+function stopSDK() {
+    if (!!publisher)
+        publisher.stop();
+    if (!!player)
+        player.stop();
+}
+
+</script>
